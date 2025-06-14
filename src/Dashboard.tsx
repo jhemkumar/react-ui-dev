@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Button,
   Box,
@@ -303,16 +303,7 @@ const Dashboard: React.FC = () => {
         }}
       >
         <Routes>
-          <Route path="/" element={
-            <Paper elevation={3} sx={{ p: 4, minWidth: 300, textAlign: 'center' }}>
-              <Typography variant="h4" gutterBottom>
-                Welcome to Dashboard
-              </Typography>
-              <Typography variant="body1" sx={{ mb: 3 }}>
-                Select an option from the menu to get started.
-              </Typography>
-            </Paper>
-          } />
+          <Route path="/" element={<FinancialProducts />} />
           <Route path="/place-order" element={<FinancialProducts />} />
           <Route path="/place-order/loans" element={<PlaceOrder />} />
           <Route path="/place-order/deposits" element={<PlaceOrder />} />
@@ -350,7 +341,40 @@ const Dashboard: React.FC = () => {
 const FinancialProducts: React.FC = () => {
   const navigate = useNavigate();
   const [selectedProduct, setSelectedProduct] = useState<string | null>(null);
+  const { token } = useAuth();
   
+  // Add message event listener for iframe token requests
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      // Verify the origin of the message
+      if (event.origin === window.location.origin) {
+        if (event.data.type === 'GET_TOKEN') {
+          // Send token back to iframe
+          event.source?.postMessage({
+            type: 'TOKEN_RESPONSE',
+            token: token
+          }, { targetOrigin: event.origin });
+        }
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [token]);
+
+  // Function to inject token into iframe
+  const injectTokenIntoIframe = useCallback((iframe: HTMLIFrameElement) => {
+    if (iframe && iframe.contentWindow) {
+      // Send token to iframe when it loads
+      iframe.onload = () => {
+        iframe.contentWindow?.postMessage({
+          type: 'INIT_TOKEN',
+          token: token
+        }, { targetOrigin: window.location.origin });
+      };
+    }
+  }, [token]);
+
   const products = [
     {
       title: 'Loans',
@@ -442,6 +466,7 @@ const FinancialProducts: React.FC = () => {
         </Box>
         <Box sx={{ flexGrow: 1, position: 'relative' }}>
           <iframe
+            ref={injectTokenIntoIframe}
             src="https://www.nseindia.com/market-data/ipo"
             style={{
               width: '100%',
@@ -451,6 +476,7 @@ const FinancialProducts: React.FC = () => {
               boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
             }}
             title="IPO Bonds"
+            sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
           />
         </Box>
       </Box>
